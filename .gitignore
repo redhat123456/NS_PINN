@@ -1,5 +1,7 @@
 **/log/
 **/data/
+**/deal/
+**/raw_data/
 *.pth
 **/__pycache__/
 **/.idea/
