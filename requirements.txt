@@ -1,0 +1,9 @@
+imageio==2.34.1
+matplotlib==3.8.4
+numpy==1.26.4
+pandas==2.2.2
+pyDOE==0.3.8
+pynvml==11.5.0
+PyYAML==6.0.1
+scipy==1.13.0
+tqdm==4.66.2
