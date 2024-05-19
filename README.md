@@ -4,15 +4,7 @@
 
 对数据监督损失、NS方程损失、边界损失采用等权值损失计算
 
-目前在二维圆柱绕流场景下，对于Re=3900的数据进行训练，
-
-训练过程损失和误差如下：
-
-![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/loss_process_Re3900.png)
-
-![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/evaluate_process_Re3900.png)
-
-得到效果图如下：
+目前在二维圆柱绕流场景下，对于Re=3900的数据进行训练，得到效果图如下：
 
 ![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/u_Re3900.gif)
 
@@ -20,7 +12,11 @@
 
 ![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/p_Re3900.gif)
 
+训练过程损失和误差如下：
 
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/loss_process_Re3900.png)
+
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/evaluate_process_Re3900.png)
 
 # 一、环境配置
 
