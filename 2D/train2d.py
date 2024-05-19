@@ -256,7 +256,7 @@ class TrainModel(object):
                     print(f"L2_u: {valid_u}")
                     print(f"L2_v: {valid_v}")
                     print(f"L2_p: {valid_p}")
-                    print(a)
+                    print(a)git
 
                 torch.save(model.state_dict(), f'{last_model_file}')
                 if train_loss < min_lost:

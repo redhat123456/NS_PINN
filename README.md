@@ -4,9 +4,21 @@
 
 对数据监督损失、NS方程损失、边界损失采用等权值损失计算
 
-目前在二维圆柱绕流场景下，对于Re=3900的数据进行训练，得到效果图如下：
+目前在二维圆柱绕流场景下，对于Re=3900的数据进行训练，
 
+训练过程损失和误差如下：
 
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/loss_process_Re3900.png)
+
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/evaluate_process_Re3900.png)
+
+得到效果图如下：
+
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/u_Re3900.gif)
+
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/v_Re3900.gif)
+
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/p_Re3900.gif)
 
 
 
@@ -36,15 +48,15 @@ pip install -r requirements.txt
 
 
 
-# 二、案例复现
+# 二、二维圆柱绕流案例复现
 
-### 一、数据获取
+### 1、数据获取
 
-在以下链接中获取样本数据：
+在以下链接中获取样本数据：[Release data_Re3900_2d · guoX66/NS_PINN (github.com)](https://github.com/guoX66/NS_PINN/releases/tag/data)
 
 将获取的mat文件放入2D/data路径下
 
-### 二、模型训练
+### 2、模型训练
 
 进入2D文件夹路径：
 
@@ -68,7 +80,7 @@ python train2d.py --name "2024-04-30 13h 19m 50s"
 
 传入需要续训的文件名即可，但注意会使用之前设置的训练参数，如需要修改训练参数则在续训之前到相应文件夹下对train_cfg.yaml进行修改
 
-### 三、模型验证
+### 3、模型验证
 
 可以对训练过程中保存的损失最小的模型进行验证
 
@@ -76,12 +88,10 @@ python train2d.py --name "2024-04-30 13h 19m 50s"
 python val.py --name "2024-04-30 13h 19m 50s"
 ```
 
-### 五、流场预测
+### 4、流场预测
 
 ```bash
 python export_plot.py --name "2024-04-30 13h 19m 50s"
 ```
 
 预测结果保存在log文件夹下对应训练文件夹中
-
-
