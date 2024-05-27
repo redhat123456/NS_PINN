@@ -1,4 +1,5 @@
 import argparse
+import collections
 
 import imageio
 import numpy as np
@@ -13,7 +14,7 @@ from model import *
 from utils import jy_deal, no_state, load_data
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--name', type=str, default='Re3900_2024-05-18 11h 39m 57s')
+parser.add_argument('--name', type=str, default='Re3900_2024-05-27 16h 30m 47s')
 parser.add_argument('--fps', type=int, default=100)
 args = parser.parse_args()
 
@@ -58,30 +59,29 @@ def plot_compare_time_series(filename, x_mesh, y_mesh, q_selected, q_predict, se
     plt.close('all')
 
 
-def compare_unsteady(file_name, filename_raw_data, model_path, L, U, xy_range):
+def compare_unsteady(file_name, filename_raw_data, model_path, L, U, data_mean, data_std):
     # 预测值
-    data, total_data, total_data_no_state, bound_data, t_mean, t_std = load_data(filename_raw_data, L, U)
+    data, total_data, total_data_no_state, bound_data, _, _ = load_data(filename_raw_data, L, U)
 
-    x_mean = (xy_range[0] / L + xy_range[1] / L) / 2
-    y_mean = (xy_range[2] / L + xy_range[3] / L) / 2
-    x_std = ((xy_range[1] / L - xy_range[0] / L) ** 2 / 12) ** (1 / 2)
-    y_std = ((xy_range[3] / L - xy_range[2] / L) ** 2 / 12) ** (1 / 2)
+    inp_mean = data_mean[:3]
+    inp_std = data_std[:3]
+    out_mean = data_mean[3:]
+    out_std = data_std[3:]
+    out_mean = torch.tensor(out_mean, dtype=torch.float32).to(device)
+    out_std = torch.tensor(out_std, dtype=torch.float32).to(device)
 
-    data_mean = np.array([x_mean, y_mean, t_mean])
-    data_std = np.array([x_std, y_std, t_std])
-
-    pinn_net = PINN_Net(layer_mat, data_mean, data_std, device)
-    pinn_net.load_state_dict(
-        {k.replace('module.', ''): v for k, v in torch.load(model_path).items()})
-
-    if isinstance(pinn_net, torch.nn.DataParallel):
-        pinn_net = pinn_net.module
+    pinn_net = PINN_2D(layer_mat, inp_mean, inp_std, device)
+    model_comment = torch.load(model_path)
+    if isinstance(model_comment, collections.OrderedDict):
+        pinn_net.load_state_dict(
+            {k.replace('module.', ''): v for k, v in model_comment.items()})
     pinn_net = pinn_net.to(device)
     pinn_net.eval()
 
     net_inp = torch.tensor(total_data_no_state[:, 0:3], dtype=torch.float32).to(device)
-
-    pre = pinn_net(net_inp)
+    with torch.no_grad():
+        pre = pinn_net(net_inp)
+        pre = pre * out_std + out_mean
 
     u_pre = pre[:, 0].reshape(-1, 1)
     v_pre = pre[:, 1].reshape(-1, 1)
@@ -199,11 +199,13 @@ L = train_cfg['L']
 U = train_cfg['U']
 Re = train_cfg['Re']
 xy_range = train_cfg['xy_range']
+data_mean = np.array(train_cfg['data_mean'])
+data_std = np.array(train_cfg['data_std'])
 
 output_file = f'pre_data_{Re}'
 rou = 1000
 model_path = os.path.join(file_name, model_name)
-res, t = compare_unsteady(file_name, filename_raw_data, model_path, L, U, xy_range)
+res, t = compare_unsteady(file_name, filename_raw_data, model_path, L, U, data_mean, data_std)
 
 data = np.hstack(res)
 

@@ -4,19 +4,19 @@
 
 对数据监督损失、NS方程损失、边界损失采用等权值损失计算
 
-目前在二维圆柱绕流场景下，对于Re=3900的数据进行训练，得到效果图如下：
+目前在二维圆柱绕流场景下，对于Re=3900的数据进行训练，得到效果图如下：（使用AdamW和余弦退火策略）
 
-![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/u_Re3900.gif)
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/u_Re3900_adamw_cos.gif)
 
-![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/v_Re3900.gif)
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/v_Re3900_adamw_cos.gif)
 
-![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/p_Re3900.gif)
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/p_Re3900_adamw_cos.gif)
 
 训练过程损失和误差如下：
 
-![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/loss_process_Re3900.png)
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/loss_process_Re3900_adamw_cos.png)
 
-![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/evaluate_process_Re3900.png)
+![image](https://github.com/guoX66/NS_PINN/blob/main/2D/assets/evaluate_process_Re3900_adamw_cos.png)
 
 # 一、环境配置
 
@@ -63,7 +63,7 @@ cd 2D
 在命令行输入以下命令开始训练
 
 ```bash
-python train2d.py --data_path 'data/data_Re3900_2.mat'
+python train3d.py --data_path 'data/data_Re3900_2.mat'
 ```
 
 训练好的模型和过程记录保存在log文件夹下,按训练开始时间命名文件夹
@@ -71,7 +71,7 @@ python train2d.py --data_path 'data/data_Re3900_2.mat'
 如果需要断续续训，则使用以下命令：
 
 ```bash
-python train2d.py --name "2024-04-30 13h 19m 50s"
+python train3d.py --name "2024-04-30 13h 19m 50s"
 ```
 
 传入需要续训的文件名即可，但注意会使用之前设置的训练参数，如需要修改训练参数则在续训之前到相应文件夹下对train_cfg.yaml进行修改

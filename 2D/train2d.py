@@ -2,7 +2,9 @@
 import collections
 import traceback
 import torch
-from model import pinn_2d
+from torch import nn
+
+from model import PINN_2D, NS_loss
 from utils import jy_deal, add_log, train_bar, write_log, save_csv, ini_env, build_optimizer, validation_2d, load_data, \
     select_point, load_equation_points_lhs
 import argparse
@@ -13,7 +15,7 @@ import pynvml
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--name', type=str)
-# parser.add_argument('--name', type=str, default='Re3900_2024-05-19 16h 20m 22s')
+# parser.add_argument('--name', type=str, default='Re3900_2024-05-20 09h 52m 54s')
 parser.add_argument('--data_path', type=str, default='data/data_Re3900_2.mat')
 parser.add_argument('--Re', type=int, default=3900)
 parser.add_argument('--L', type=float, default=0.1)
@@ -27,8 +29,6 @@ parser.add_argument('--epoch', type=int, default=500000)
 parser.add_argument('--inner_epoch', type=int, default=1)
 parser.add_argument('--save_interval', type=int, default=100)
 parser.add_argument('--dimension', type=int, default=3)
-parser.add_argument('--optimizer', type=str, default='adam')
-parser.add_argument('--scheduler', type=str, default='exp')
 parser.add_argument('--lr', type=float, default=1e-3)
 parser.add_argument('--hidden_layers', type=int, default=10)
 parser.add_argument('--layer_neurons', type=int, default=64)
@@ -61,8 +61,6 @@ class TrainModel(object):
         self.epoch = args.epoch
         self.inner_epoch = args.inner_epoch
         self.layer_mat = [args.dimension] + args.hidden_layers * [args.layer_neurons] + [3]
-        self.optimizer_name = args.optimizer
-        self.scheduler_name = args.scheduler
         self.dimension = args.dimension
         self.N_eqa = args.N_eqa
         self.N_bound = args.N_bound
@@ -71,8 +69,20 @@ class TrainModel(object):
         self.xy_range = [args.left, args.right, args.bottom, args.top]
         self.r = args.r
         self.name = args.name
+
+    def prepare_training(self):
+        txt_list = []
+        data, total_data, total_data_no_state, bound_data, data_mean, data_std = load_data(self.data_path, self.L,
+                                                                                           self.U)
+        self.data_mean = data_mean
+        self.data_std = data_std
+        self.inp_mean = data_mean[:3]
+        self.inp_std = data_std[:3]
+        self.out_mean = data_mean[3:]
+        self.out_std = data_std[3:]
+
         if self.name is None:
-            re_des = f"Re{Re}_"
+            re_des = f"Re{self.Re}_"
             self.name = re_des + time.strftime('%Y-%m-%d %Hh %Mm %Ss', time.localtime())
             self.write_path = os.path.join('log', self.name)
             train_cfg = {
@@ -87,15 +97,15 @@ class TrainModel(object):
                 'epoch': self.epoch,
                 'inner_epoch': self.inner_epoch,
                 'lr': self.lr,
-                'optimizer_name': self.optimizer_name,
-                'scheduler_name': self.scheduler_name,
                 'dimension': self.dimension,
                 'N_eqa': self.N_eqa,
                 'N_bound': self.N_bound,
                 'N_data': self.N_data,
                 'save_interval': self.save_interval,
                 'xy_range': self.xy_range,
-                'r': self.r
+                'r': self.r,
+                'data_mean': self.data_mean.tolist(),
+                'data_std': self.data_std.tolist(),
             }
             jy_deal(os.path.join(self.write_path, 'train_cfg.yaml'), 'w', train_cfg)
             os.makedirs(self.write_path, exist_ok=True)
@@ -116,8 +126,6 @@ class TrainModel(object):
                 self.epoch = train_cfg['epoch']
                 self.inner_epoch = train_cfg['inner_epoch']
                 self.lr = train_cfg['lr']
-                self.optimizer_name = train_cfg['optimizer_name']
-                self.scheduler_name = train_cfg['scheduler_name']
                 self.dimension = train_cfg['dimension']
                 self.N_eqa = train_cfg['N_eqa']
                 self.N_bound = train_cfg['N_bound']
@@ -125,23 +133,15 @@ class TrainModel(object):
                 self.save_interval = train_cfg['save_interval']
                 self.xy_range = train_cfg['xy_range']
                 self.r = train_cfg['r']
+                self.data_mean = np.array(train_cfg['data_mean'])
+                self.data_std = np.array(train_cfg['data_std'])
+                self.inp_mean = data_mean[:3]
+                self.inp_std = data_std[:3]
+                self.out_mean = data_mean[3:]
+                self.out_std = data_std[3:]
                 self.is_continue = True
 
-    def prepare_training(self):
-        txt_list = []
-        data, total_data, total_data_no_state, bound_data, t_mean, t_std = load_data(self.data_path, self.L,
-                                                                                     self.U)
-
-        # 均匀分布均值和方差
-        x_mean = (self.xy_range[0] / self.L + self.xy_range[1] / self.L) / 2
-        y_mean = (self.xy_range[2] / self.L + self.xy_range[3] / self.L) / 2
-        x_std = ((self.xy_range[1] / self.L - self.xy_range[0] / self.L) ** 2 / 12) ** (1 / 2)
-        y_std = ((self.xy_range[3] / self.L - self.xy_range[2] / self.L) ** 2 / 12) ** (1 / 2)
-
-        data_mean = np.array([x_mean, y_mean, t_mean])
-        data_std = np.array([x_std, y_std, t_std])
-
-        model = pinn_2d(self.layer_mat, data_mean, data_std, self.device)
+        model = PINN_2D(self.layer_mat, self.inp_mean, self.inp_std, self.device)
 
         add_log('{0:-^60}'.format('训练准备中'), txt_list)
         add_log('{0:-^60}'.format('模型与训练参数如下'), txt_list)
@@ -156,10 +156,11 @@ class TrainModel(object):
         for i in self.device_name:
             add_log(i, txt_list)
 
-        return [model, txt_list, data, total_data, total_data_no_state, bound_data, data_mean, data_std]
+        return [model, txt_list, data, total_data, total_data_no_state, bound_data, self.data_mean, self.data_std]
 
     def process_training(self, train_args):
         model, txt_list, data, total_data, total_data_no_state, bound_data, data_mean, data_std = train_args
+        LES_data=box_filter(total_data_no_state)
 
         pynvml.nvmlInit()
         last_model_file = f"{self.write_path}/last_{self.model_name}.pth"
@@ -180,8 +181,6 @@ class TrainModel(object):
             min_lost = min(lost_list)
             ml_epoch = np.argmin(lost_list) + 1
             start_epoch = len(lost_list) * self.save_interval
-
-
         else:
             t_list = []
             min_lost = np.Inf  # 起步loss
@@ -189,8 +188,10 @@ class TrainModel(object):
             start_epoch = 0
 
         model = model.to(self.device)  # 将模型迁移到gpu
+        model = nn.DataParallel(model, device_ids=self.gpus, output_device=self.gpus[0])
+        loss_fn = nn.MSELoss()
 
-        optimizer, scheduler = build_optimizer(model, self.optimizer_name, self.scheduler_name, self.lr)
+        optimizer, scheduler = build_optimizer(model, self.lr)
         optimizer.zero_grad()  # 梯度归零
         for i in range(start_epoch):
             optimizer.step()
@@ -216,7 +217,6 @@ class TrainModel(object):
 
         min_t = total_data_no_state[:, 2].min()
         max_t = total_data_no_state[:, 2].max()
-
         low_bound = np.array([self.xy_range[0] / self.L, self.xy_range[2] / self.L, min_t]).reshape(1, -1)
         up_bound = np.array([self.xy_range[1] / self.L, self.xy_range[3] / self.L, max_t]).reshape(1, -1)
         radius = self.r / self.L
@@ -231,7 +231,8 @@ class TrainModel(object):
 
                 data_dataset = select_point(data, self.N_data, is_dis=False).to(self.device)
 
-                self.single_train(model, optimizer, scheduler, data_dataset, eqa_dataset, bound_dataset, loss_list)
+                self.single_train(model, optimizer, scheduler, data_dataset, eqa_dataset, bound_dataset, loss_list,
+                                  loss_fn)
 
                 if args.is_print:
                     log = [self.epoch, self.inner_epoch, st, i + 1, j + 1, loss_list[-1][0], start_epoch]
@@ -250,7 +251,9 @@ class TrainModel(object):
                 loss_list.append(train_loss)
                 current_lr = optimizer.param_groups[0]['lr']
 
-                valid_u, valid_v, valid_p = validation_2d(total_data, model, self.L, self.U, self.device)
+                valid_u, valid_v, valid_p = validation_2d(total_data, self.out_mean, self.out_std, model, self.L,
+                                                          self.U,
+                                                          self.device)
                 if args.is_print:
                     print()
                     print(f"L2_u: {valid_u}")
@@ -261,8 +264,8 @@ class TrainModel(object):
                 torch.save(model.state_dict(), f'{last_model_file}')
                 if train_loss < min_lost:
                     ml_epoch = i + 1
-                    min_lost = train_loss
-                    torch.save(model.state_dict(), f'{best_model_file}')
+                min_lost = train_loss
+                torch.save(model.state_dict(), f'{best_model_file}')
                 ee_time = time.time()
                 save_csv(loss_path, ee_time - ss_time, train_loss, data_loss, eqa_loss, bound_loss, current_lr)
                 save_csv(evaluate_path, valid_u, valid_v, valid_p)
@@ -275,37 +278,47 @@ class TrainModel(object):
 
         add_log('{0:-^60}'.format(f'本次训练结束于{edate_time}，训练结果如下'), txt_list)
         add_log(f'本次训练开始时间：{date_time}', txt_list)
-        add_log("本次训练用时:{}小时:{}分钟:{}秒".format(int(total_time // 3600), int((total_time % 3600) // 60),
-                                                         int(total_time % 60)), txt_list)
+        add_log(
+            "本次训练用时:{}小时:{}分钟:{}秒".format(int(total_time // 3600), int((total_time % 3600) // 60),
+                                                     int(total_time % 60)), txt_list)
 
         add_log(f'验证集上在第{ml_epoch}次迭代达到最小损失，最小的损失为{round(float(min_lost), 3)}', txt_list)
 
         write_log(f"{self.write_path}", self.model_name, txt_list)
 
-    def single_train(self, model, optimizer, scheduler, data_dataset, eqa_dataset, bound_dataset, loss_list):
+    def single_train(self, model, optimizer, scheduler, data_dataset, eqa_dataset, bound_dataset, loss_list, loss_fn):
+
+        out_mean = torch.tensor(self.out_mean, dtype=torch.float32).to(self.device)
+
+        out_std = torch.tensor(self.out_std, dtype=torch.float32).to(self.device)
 
         optimizer.zero_grad()  # 梯度归零
 
-        # with autocast():
-        data_inp = data_dataset[:, 0:3]
+        # with autocast(): 混合精度训练
 
-        eqa_inp = eqa_dataset[:, 0:3].requires_grad_(True).to(self.device)
-
-        bound_inp = bound_dataset[:, 0:3]
+        eqa_inp = eqa_dataset.requires_grad_(True).to(self.device)
 
         n_bound = bound_dataset.shape[0]
 
-        bd_inp = torch.cat((bound_inp, data_inp), 0)
+        bd_dataset = torch.cat((data_dataset, bound_dataset), 0)
+
+        bd_inp = bd_dataset[:, 0:3]
+
+        bd_true = bd_dataset[:, 3:]
+
+        bd_true = (bd_true - out_mean) / out_std  # 监督值标准化
 
         predict_bd = model(bd_inp)
 
         pre_eqa = model(eqa_inp)
 
-        eqa_loss = model.NS_loss(eqa_inp, pre_eqa, self.Re)
+        pre_eqa = pre_eqa * out_std + out_mean  # 方程预测值反标准化
 
-        bound_loss = model.loss(bound_dataset[:, 3:], predict_bd[:n_bound, :])
+        eqa_loss = NS_loss(eqa_inp, pre_eqa, self.Re)
 
-        data_loss = model.loss(data_dataset[:, 3:], predict_bd[n_bound:, :])
+        bound_loss = loss_fn(bd_true[:n_bound, :], predict_bd[:n_bound, :])
+
+        data_loss = loss_fn(bd_true[n_bound:, :], predict_bd[n_bound:, :])
 
         loss = data_loss + eqa_loss + bound_loss
 

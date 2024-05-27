@@ -14,6 +14,9 @@ import yaml
 from torch.autograd import grad
 
 
+
+
+
 def gradient(y, x):
     return grad(y, x, grad_outputs=torch.ones_like(y), create_graph=True, retain_graph=True)[0]
 
@@ -73,8 +76,10 @@ def no_state(data, L, U, rou):
     return r_data
 
 
-def validation_2d(data, model, L, U, device, rou=1000):
+def validation_2d(data, out_mean, out_std, model, L, U, device, rou=1000):
     data = torch.tensor(data, dtype=torch.float32).to(device)
+    out_mean = torch.tensor(out_mean, dtype=torch.float32).to(device)
+    out_std = torch.tensor(out_std, dtype=torch.float32).to(device)
     # 预测值
     inp_data = data[:, :3]
     inp_data[:, 0] = inp_data[:, 0] / L
@@ -83,6 +88,7 @@ def validation_2d(data, model, L, U, device, rou=1000):
     model.eval()
     with torch.no_grad():
         pre = model(inp_data)
+        pre = pre * out_std + out_mean
 
     u_pre = pre[:, 0]
     v_pre = pre[:, 1]
@@ -109,19 +115,12 @@ def validation_2d(data, model, L, U, device, rou=1000):
     return L2_u, L2_v, L2_p
 
 
-def build_optimizer(network, optimizer_name, scheduler_name, learning_rate):
+def build_optimizer(network, learning_rate):
     # default 默认优化器
-    optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.999)
+    optimizer = torch.optim.AdamW(network.parameters(), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100)
     # 超参数搜索优化器
-    if optimizer_name == "sgd":
-        optimizer = torch.optim.SGD(network.parameters(), lr=learning_rate, momentum=0.9)
-    elif optimizer_name == "adam":
-        optimizer = torch.optim.Adam(network.parameters(), lr=learning_rate)
-    if scheduler_name == "exp":
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.999)
-    elif scheduler_name == "fix":
-        scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=1)
+
     return optimizer, scheduler
 
 
@@ -147,9 +146,9 @@ def load_data(filename, L, U):
     data = no_state(data, L, U, 1000)
     total_data_no_state = no_state(total_data, L, U, 1000)
     bound_data = no_state(bound_data, L, U, 1000)
-    t_mean = np.mean(data[:, 2], axis=0)
-    t_std = np.std(data[:, 2], axis=0)
-    return data, total_data, total_data_no_state, bound_data, t_mean, t_std
+    data_mean = np.mean(total_data_no_state, axis=0)
+    data_std = np.std(total_data_no_state, axis=0)
+    return data, total_data, total_data_no_state, bound_data, data_mean, data_std
 
 
 def load_data_points_2d(filename, L, U, state=False):
