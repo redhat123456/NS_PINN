@@ -160,8 +160,6 @@ class TrainModel(object):
 
     def process_training(self, train_args):
         model, txt_list, data, total_data, total_data_no_state, bound_data, data_mean, data_std = train_args
-        LES_data=box_filter(total_data_no_state)
-
         pynvml.nvmlInit()
         last_model_file = f"{self.write_path}/last_{self.model_name}.pth"
         best_model_file = f"{self.write_path}/best_{self.model_name}.pth"
