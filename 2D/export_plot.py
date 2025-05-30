@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import scipy
 import matplotlib
+matplotlib.use("Agg")
 import torch
 from matplotlib import pyplot as plt
 from tqdm import tqdm
@@ -19,7 +20,10 @@ parser.add_argument('--fps', type=int, default=100)
 args = parser.parse_args()
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
+font_params = {
+        'size': 14,
+        'family': 'Times New Roman',
+    }
 
 def fan_wulianggang(u, v, p, U, rou):
     P = rou * U ** 2
@@ -55,6 +59,7 @@ def plot_compare_time_series(filename, x_mesh, y_mesh, q_selected, q_predict, se
     ax2.set_xlabel('X')
     img_name = os.path.join(filename, 'gif_make')
     os.makedirs(img_name, exist_ok=True)
+    plt.rc('font', **font_params)
     plt.savefig(img_name + '/--time' + "{:.2f}".format(select_time) + name + '.png')
     plt.close('all')
 
@@ -167,25 +172,29 @@ def make_plot(train_cfg):
     evaluate_data = np.loadtxt(f"{evaluate_path}", delimiter=',')
     loss_data = loss_data[:, 1:5]
     x = [i + 1 for i in range(0, save_interval * loss_data.shape[0], save_interval)]
-    plt.rcParams['font.sans-serif'] = ['Times New Roman']
-    plt.rcParams['axes.unicode_minus'] = False
 
-    plt.figure(figsize=(12.8, 9.6))
+    plt.rc('font', **font_params)
+    plt.figure(figsize=(12, 8))
     plt.plot(x, loss_data)
     plt.legend(['total_loss', 'data_loss', 'eqa_loss', 'bound_loss'], fontsize=20)
     plt.title(model_name, fontsize=20)
     plt.xlabel('epoch', fontsize=20)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
+    plt.grid()
+    plt.yscale('log')
     plt.savefig(f'{write_path}/loss_process.png')
 
-    plt.figure(figsize=(12.8, 9.6))
+    plt.rc('font', **font_params)
+    plt.figure(figsize=(12, 8))
     plt.plot(x, evaluate_data)
     plt.legend(['L2_u', 'L2_v', 'L2_p'], fontsize=20)
     plt.title(model_name, fontsize=20)
     plt.xlabel('epoch', fontsize=20)
     plt.xticks(fontsize=20)
     plt.yticks(fontsize=20)
+    plt.grid()  
+    plt.yscale('log')
     plt.savefig(f'{write_path}/evaluate_process.png')
 
 
